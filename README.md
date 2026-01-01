@@ -82,12 +82,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
-
-- **Numbers Protocol** - For ProofSnap cryptographic evidence API
-- Built during a hackathon to help fight AI misinformation
-- Inspired by the need for transparent image verification tools
-
 ## 👨‍💻 Author
 
 Created by [@tastymooncakes](https://github.com/tastymooncakes)
