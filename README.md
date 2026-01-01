@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ImageProof Studio
 
-## Getting Started
+![ImageProof Studio](https://img.shields.io/badge/Next.js-15-black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-First, run the development server:
+**Professional image verification and annotation tool with ProofSnap evidence integration.**
+
+ImageProof Studio helps investigators analyze suspicious AI-generated images by providing an intuitive annotation interface and generating comprehensive verification reports with cryptographic evidence from Numbers Protocol.
+
+## 🎯 Features
+
+- **Interactive Annotation** - Click to place numbered markers on suspicious areas
+- **Comment System** - Add detailed observations for each finding
+- **ProofSnap Integration** - Attach cryptographic evidence from Numbers Protocol
+- **Professional Reports** - Generate PDF reports with annotated images and findings
+- **Local Storage** - All annotations persist in browser localStorage
+- **Clean UI** - Modern, professional interface built with Tailwind CSS
+
+## 🚀 Demo
+
+Built for hackathons to help combat AI-generated misinformation and deepfakes.
+
+## 🛠️ Tech Stack
+
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Canvas**: React Konva
+- **PDF Generation**: jsPDF
+- **Icons**: Lucide React
+- **State Management**: React Hooks + localStorage
+
+## 📦 Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/tastymooncakes/ImageProof-Studio.git
+cd ImageProof-Studio
+
+# Install dependencies
+npm install
+
+# Run development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🔧 Configuration
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Numbers Protocol API Token
 
-## Learn More
+1. Install the [ProofSnap Chrome Extension](https://chromewebstore.google.com/detail/proofsnap/pmofaiaefjjnfphfdhjaeogelolnikho)
+2. Get your capture token from the extension settings
+3. Add it in **Settings** within ImageProof Studio
+4. Now you can attach cryptographic evidence to your annotations
 
-To learn more about Next.js, take a look at the following resources:
+## 📖 Usage
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Select an Image** - Choose from pre-loaded AI-generated images
+2. **Add Annotations** - Click on suspicious areas to place markers
+3. **Add Comments** - Describe what looks unnatural or manipulated
+4. **Attach Evidence** - Link ProofSnap captures as cryptographic proof
+5. **Generate Report** - Export a professional PDF with all findings
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🎨 Screenshots
 
-## Deploy on Vercel
+### Annotation Interface
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Professional canvas-based annotation system with numbered markers.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### PDF Report
+
+Comprehensive verification reports with metadata, statistics, and evidence links.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Numbers Protocol** - For ProofSnap cryptographic evidence API
+- Built during a hackathon to help fight AI misinformation
+- Inspired by the need for transparent image verification tools
+
+## 👨‍💻 Author
+
+Created by [@tastymooncakes](https://github.com/tastymooncakes)
+
+---
+
+**⭐ If you find this project useful, please consider giving it a star!**
