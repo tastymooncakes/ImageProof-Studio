@@ -6,6 +6,7 @@ import { X, Check, Paperclip } from "lucide-react";
 import { Annotation, ProofSnapAsset } from "@/types";
 import { storage } from "@/lib/storage";
 import ProofSnapSelector from "./ProofSnapSelector";
+import EvidenceUpload from "./EvidenceUpload";
 
 interface AnnotationModalProps {
   annotation: Annotation;
@@ -14,7 +15,8 @@ interface AnnotationModalProps {
   onSave: (
     comment: string,
     proofSnapAssetId?: string,
-    proofSnapUrl?: string
+    proofSnapUrl?: string,
+    supportingEvidenceIds?: string[]
   ) => void;
 }
 
@@ -26,6 +28,9 @@ export default function AnnotationModal({
 }: AnnotationModalProps) {
   const [comment, setComment] = useState(annotation.comment || "");
   const [showProofSnapSelector, setShowProofSnapSelector] = useState(false);
+  const [supportingEvidenceIds, setSupportingEvidenceIds] = useState<string[]>(
+    annotation.supportingEvidenceIds || []
+  );
 
   // Initialize selectedAsset from existing annotation data
   const [selectedAsset, setSelectedAsset] = useState<ProofSnapAsset | null>(
@@ -48,25 +53,58 @@ export default function AnnotationModal({
 
   const handleSave = () => {
     const assetId = selectedAsset?.nid || selectedAsset?.id;
-    console.log("Saving and closing:", { comment, assetId, selectedAsset });
-    onSave(comment, assetId, selectedAsset?.asset_file);
-    onClose(); // Close modal after saving
+    console.log("Saving:", {
+      comment,
+      assetId,
+      selectedAsset,
+      supportingEvidenceIds,
+    });
+    onSave(comment, assetId, selectedAsset?.asset_file, supportingEvidenceIds);
   };
 
   const handleSelectAsset = (asset: ProofSnapAsset) => {
     console.log("Asset selected:", asset);
     setSelectedAsset(asset);
-    setShowProofSnapSelector(false); // Hide selector after selection
+    setShowProofSnapSelector(false);
   };
+
+  const handleEvidenceAdded = (evidenceId: string, evidenceName: string) => {
+    setSupportingEvidenceIds([...supportingEvidenceIds, evidenceId]);
+  };
+
+  // Calculate evidence tier
+  const getTier = () => {
+    if (selectedAsset) return 1; // ProofSnap
+    if (supportingEvidenceIds.length > 0) return 2; // Supporting images
+    if (comment) return 3; // Comment only
+    return null;
+  };
+
+  const tier = getTier();
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
-          <h2 className="text-xl font-semibold text-gray-900">
-            Annotation #{annotationNumber}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Annotation #{annotationNumber}
+            </h2>
+            {tier && (
+              <span
+                className={`text-xs font-medium px-2 py-1 rounded-full ${
+                  tier === 1
+                    ? "bg-green-100 text-green-700"
+                    : tier === 2
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-100 text-gray-700"
+                }`}
+              >
+                Tier {tier}
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
@@ -83,7 +121,7 @@ export default function AnnotationModal({
               htmlFor="comment"
               className="block text-sm font-medium text-gray-700 mb-2"
             >
-              Comment
+              Comment (Tier 3)
             </label>
             <textarea
               id="comment"
@@ -95,11 +133,28 @@ export default function AnnotationModal({
             />
           </div>
 
-          {/* ProofSnap Section */}
+          {/* Supporting Evidence Section (Tier 2) */}
+          <div className="pt-4 border-t border-gray-200">
+            <h3 className="text-sm font-medium text-gray-900 mb-4">
+              Supporting Evidence (Tier 2)
+              {supportingEvidenceIds.length > 0 && (
+                <span className="ml-2 text-blue-600">
+                  • {supportingEvidenceIds.length} image
+                  {supportingEvidenceIds.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </h3>
+            <EvidenceUpload
+              onEvidenceAdded={handleEvidenceAdded}
+              existingEvidenceIds={supportingEvidenceIds}
+            />
+          </div>
+
+          {/* ProofSnap Section (Tier 1) */}
           <div className="pt-4 border-t border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-900">
-                ProofSnap Evidence
+                ProofSnap Evidence (Tier 1)
               </h3>
               {hasToken && !showProofSnapSelector && (
                 <button
@@ -107,7 +162,7 @@ export default function AnnotationModal({
                   className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <Paperclip size={14} />
-                  Attach Evidence
+                  Attach ProofSnap
                 </button>
               )}
             </div>
@@ -135,7 +190,7 @@ export default function AnnotationModal({
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-green-900 flex items-center gap-2">
                           <Check size={14} />
-                          Evidence Attached
+                          ProofSnap Verified
                         </p>
                         <p className="text-xs text-green-700">
                           {new Date(

@@ -3,6 +3,7 @@
 import jsPDF from "jspdf";
 import { Annotation } from "@/types";
 import { storage } from "./storage";
+import { imageStorage } from "./imageStorage";
 
 interface ReportData {
   imageUrl: string;
@@ -22,11 +23,27 @@ export async function generateReport(data: ReportData): Promise<void> {
   const margin = 20;
   const contentWidth = pageWidth - margin * 2;
 
-  // ========== COVER PAGE ==========
+  // Calculate tier statistics
+  const tier1Count = data.annotations.filter((a) => a.proofSnapAssetId).length;
+  const tier2Count = data.annotations.filter(
+    (a) => a.supportingEvidenceIds && a.supportingEvidenceIds.length > 0
+  ).length;
+  const tier3Count = data.annotations.filter(
+    (a) =>
+      a.comment &&
+      !a.proofSnapAssetId &&
+      (!a.supportingEvidenceIds || a.supportingEvidenceIds.length === 0)
+  ).length;
+  const totalSupportingImages = data.annotations.reduce(
+    (sum, a) => sum + (a.supportingEvidenceIds?.length || 0),
+    0
+  );
+
+  // ========== PAGE 1: COVER + SUMMARY ==========
   let yPosition = 60;
 
   // Title
-  pdf.setFillColor(31, 41, 55); // gray-900
+  pdf.setFillColor(31, 41, 55);
   pdf.rect(0, 40, pageWidth, 30, "F");
   pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(24);
@@ -37,14 +54,14 @@ export async function generateReport(data: ReportData): Promise<void> {
   pdf.setTextColor(0, 0, 0);
 
   // Metadata Box
-  pdf.setFillColor(249, 250, 251); // gray-50
+  pdf.setFillColor(249, 250, 251);
   pdf.roundedRect(margin, yPosition, contentWidth, 50, 3, 3, "F");
-  pdf.setDrawColor(229, 231, 235); // gray-200
+  pdf.setDrawColor(229, 231, 235);
   pdf.roundedRect(margin, yPosition, contentWidth, 50, 3, 3, "S");
 
   pdf.setFontSize(10);
   pdf.setFont("helvetica", "bold");
-  pdf.setTextColor(75, 85, 99); // gray-600
+  pdf.setTextColor(75, 85, 99);
 
   const metaY = yPosition + 12;
   pdf.text("REPORT METADATA", margin + 10, metaY);
@@ -67,52 +84,57 @@ export async function generateReport(data: ReportData): Promise<void> {
   yPosition += 65;
 
   // Summary Statistics Box
-  const withEvidence = data.annotations.filter(
-    (a) => a.proofSnapAssetId
-  ).length;
-  const withComments = data.annotations.filter((a) => a.comment).length;
-
-  pdf.setFillColor(239, 246, 255); // blue-50
-  pdf.roundedRect(margin, yPosition, contentWidth, 45, 3, 3, "F");
-  pdf.setDrawColor(191, 219, 254); // blue-200
-  pdf.roundedRect(margin, yPosition, contentWidth, 45, 3, 3, "S");
+  pdf.setFillColor(239, 246, 255);
+  pdf.roundedRect(margin, yPosition, contentWidth, 60, 3, 3, "F");
+  pdf.setDrawColor(191, 219, 254);
+  pdf.roundedRect(margin, yPosition, contentWidth, 60, 3, 3, "S");
 
   pdf.setFontSize(10);
   pdf.setFont("helvetica", "bold");
-  pdf.setTextColor(30, 64, 175); // blue-800
+  pdf.setTextColor(30, 64, 175);
   pdf.text("SUMMARY STATISTICS", margin + 10, yPosition + 12);
 
   pdf.setFont("helvetica", "normal");
   pdf.setTextColor(0, 0, 0);
 
-  const statsY = yPosition + 22;
+  const statsY = yPosition + 24;
   const col1 = margin + 10;
   const col2 = margin + contentWidth / 2;
 
   pdf.setFontSize(9);
   pdf.setTextColor(75, 85, 99);
   pdf.text("Total Findings:", col1, statsY);
-  pdf.text("With Evidence:", col1, statsY + 8);
-  pdf.text("With Comments:", col2, statsY);
-  pdf.text("Verification Status:", col2, statsY + 8);
+  pdf.text("Tier 1 (ProofSnap Verified):", col1, statsY + 8);
+  pdf.text("Tier 2 (Supporting Evidence):", col1, statsY + 16);
+  pdf.text("Tier 3 (Comment Only):", col2, statsY);
+  pdf.text("Total Supporting Images:", col2, statsY + 8);
+  pdf.text("Verification Status:", col2, statsY + 16);
 
   pdf.setFont("helvetica", "bold");
   pdf.setTextColor(0, 0, 0);
-  pdf.setFontSize(11);
-  pdf.text(String(data.annotations.length), col1 + 40, statsY);
-  pdf.text(String(withEvidence), col1 + 40, statsY + 8);
-  pdf.text(String(withComments), col2 + 42, statsY);
+  pdf.setFontSize(10);
+  pdf.text(String(data.annotations.length), col1 + 50, statsY);
+  pdf.text(String(tier1Count), col1 + 50, statsY + 8);
+  pdf.text(String(tier2Count), col1 + 50, statsY + 16);
+  pdf.text(String(tier3Count), col2 + 50, statsY);
+  pdf.text(String(totalSupportingImages), col2 + 50, statsY + 8);
 
   // Status badge
-  const statusText = withEvidence > 0 ? "VERIFIED" : "UNVERIFIED";
-  const statusColor = withEvidence > 0 ? [34, 197, 94] : [239, 68, 68]; // green-500 : red-500
+  const statusText =
+    tier1Count > 0 ? "VERIFIED" : tier2Count > 0 ? "PARTIAL" : "UNVERIFIED";
+  const statusColor =
+    tier1Count > 0
+      ? [34, 197, 94]
+      : tier2Count > 0
+      ? [59, 130, 246]
+      : [239, 68, 68];
   pdf.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
-  pdf.roundedRect(col2 + 42, statsY + 3, 28, 6, 2, 2, "F");
+  pdf.roundedRect(col2 + 50, statsY + 11, 35, 6, 2, 2, "F");
   pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(8);
-  pdf.text(statusText, col2 + 56, statsY + 7.5, { align: "center" });
+  pdf.text(statusText, col2 + 67.5, statsY + 15.5, { align: "center" });
 
-  // ========== NEW PAGE - ANNOTATED IMAGE ==========
+  // ========== PAGE 2: ANNOTATED IMAGE ==========
   pdf.addPage();
   yPosition = 20;
 
@@ -133,7 +155,7 @@ export async function generateReport(data: ReportData): Promise<void> {
     const imgData = canvas.toDataURL("image/jpeg", 0.85);
 
     const maxWidth = contentWidth;
-    const maxHeight = 160;
+    const maxHeight = 140;
     const imgAspect = canvas.width / canvas.height;
 
     let imgWidth = maxWidth;
@@ -159,116 +181,79 @@ export async function generateReport(data: ReportData): Promise<void> {
     yPosition += 15;
   }
 
-  // ========== FINDINGS SECTION ==========
-  pdf.setTextColor(0, 0, 0);
-  pdf.setFontSize(16);
+  // Quick Reference
+  pdf.setFontSize(12);
   pdf.setFont("helvetica", "bold");
-  pdf.text("Detailed Findings", margin, yPosition);
-  yPosition += 10;
+  pdf.setTextColor(0, 0, 0);
+  pdf.text("Quick Reference", margin, yPosition);
+  yPosition += 8;
+
+  pdf.setFontSize(9);
+  pdf.setFont("helvetica", "normal");
 
   data.annotations.forEach((annotation, index) => {
-    // Calculate box height based on content
-    let boxHeight = 28; // Base height
-
-    if (annotation.comment) {
-      const lines = pdf.splitTextToSize(annotation.comment, contentWidth - 30);
-      boxHeight = Math.max(35, 20 + lines.length * 5);
-    }
-
-    // Check if we need a new page
-    if (yPosition + boxHeight > 260) {
+    if (yPosition > 250) {
       pdf.addPage();
       yPosition = 20;
     }
 
-    // Finding box
-    pdf.setFillColor(249, 250, 251);
-    pdf.roundedRect(margin, yPosition, contentWidth, boxHeight, 2, 2, "F");
-    pdf.setDrawColor(229, 231, 235);
-    pdf.roundedRect(margin, yPosition, contentWidth, boxHeight, 2, 2, "S");
+    const preview = annotation.comment
+      ? annotation.comment.substring(0, 60) +
+        (annotation.comment.length > 60 ? "..." : "")
+      : "No comment";
 
-    const innerY = yPosition + 10;
+    const tier = annotation.proofSnapAssetId
+      ? "1"
+      : annotation.supportingEvidenceIds &&
+        annotation.supportingEvidenceIds.length > 0
+      ? "2"
+      : "3";
 
-    // Number badge
-    pdf.setFillColor(239, 68, 68); // red-500
-    pdf.circle(margin + 8, innerY, 6, "F");
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(10);
-    pdf.setFont("helvetica", "bold");
-    pdf.text(String(index + 1), margin + 8, innerY + 3, { align: "center" });
-
-    // Title
-    pdf.setTextColor(0, 0, 0);
-    pdf.setFontSize(11);
-    pdf.text(`Finding #${index + 1}`, margin + 18, innerY + 2);
-
-    // Evidence badge (top right)
-    if (annotation.proofSnapAssetId) {
-      pdf.setFillColor(34, 197, 94); // green-500
-      pdf.roundedRect(
-        margin + contentWidth - 52,
-        yPosition + 6,
-        47,
-        8,
-        2,
-        2,
-        "F"
-      );
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(8);
-      pdf.setFont("helvetica", "bold");
-      pdf.text("VERIFIED", margin + contentWidth - 28.5, yPosition + 11, {
-        align: "center",
-      });
-    }
-
-    // Comment
-    let contentY = innerY + 8;
-    pdf.setFontSize(9);
-    pdf.setFont("helvetica", "normal");
-
-    if (annotation.comment) {
-      pdf.setTextColor(55, 65, 81); // gray-700
-      const lines = pdf.splitTextToSize(annotation.comment, contentWidth - 30);
-      pdf.text(lines, margin + 18, contentY);
-      contentY += lines.length * 5;
-    } else {
-      pdf.setTextColor(156, 163, 175); // gray-400
-      pdf.setFont("helvetica", "italic");
-      pdf.text("No comment provided", margin + 18, contentY);
-      contentY += 5;
-    }
-
-    // Bottom row: timestamp and evidence link
-    const bottomY = yPosition + boxHeight - 6;
-
-    pdf.setTextColor(107, 114, 128);
-    pdf.setFontSize(7);
-    pdf.setFont("helvetica", "normal");
-    pdf.text(
-      `Logged: ${new Date(annotation.createdAt).toLocaleString()}`,
-      margin + 18,
-      bottomY
-    );
-
-    // ProofSnap link (right aligned)
-    if (annotation.proofSnapUrl) {
-      pdf.setTextColor(59, 130, 246); // blue-500
-      pdf.setFont("helvetica", "normal");
-      pdf.textWithLink("View Evidence →", margin + contentWidth - 32, bottomY, {
-        url: annotation.proofSnapUrl,
-      });
-    }
-
-    yPosition += boxHeight + 6;
+    pdf.setTextColor(75, 85, 99);
+    pdf.text(`${index + 1}. [Tier ${tier}] ${preview}`, margin + 5, yPosition);
+    yPosition += 5;
   });
 
-  // ========== CONCLUSION ==========
+  // ========== PAGES 3+: DETAILED FINDINGS ==========
+  pdf.addPage();
+  yPosition = 20;
+
+  pdf.setTextColor(0, 0, 0);
+  pdf.setFontSize(16);
+  pdf.setFont("helvetica", "bold");
+  pdf.text("Detailed Findings", margin, yPosition);
+  yPosition += 15;
+
+  for (let i = 0; i < data.annotations.length; i++) {
+    const annotation = data.annotations[i];
+
+    // Calculate required space
+    let requiredSpace = 50; // Base
+    if (
+      annotation.supportingEvidenceIds &&
+      annotation.supportingEvidenceIds.length > 0
+    ) {
+      requiredSpace += 40; // Space for thumbnails
+    }
+    if (annotation.proofSnapAssetId) {
+      requiredSpace += 35;
+    }
+
+    if (yPosition + requiredSpace > 250) {
+      pdf.addPage();
+      yPosition = 20;
+    }
+
+    await renderFinding(pdf, annotation, i, margin, yPosition, contentWidth);
+    yPosition += requiredSpace + 10;
+  }
+
+  // ========== LAST PAGE: CONCLUSION ==========
   if (yPosition > 220) {
     pdf.addPage();
     yPosition = 20;
   } else {
-    yPosition += 10;
+    yPosition += 15;
   }
 
   pdf.setDrawColor(229, 231, 235);
@@ -286,13 +271,12 @@ export async function generateReport(data: ReportData): Promise<void> {
   pdf.setFont("helvetica", "normal");
   pdf.setTextColor(55, 65, 81);
 
-  const conclusionText = `This report documents ${
-    data.annotations.length
-  } finding(s) identified during the analysis of ${data.imageTitle}. ${
-    withEvidence > 0
-      ? `${withEvidence} finding(s) include cryptographic evidence from ProofSnap, providing verifiable proof of investigation.`
-      : "No cryptographic evidence was attached to the findings."
-  } This report was generated by ImageProof Studio and should be reviewed by qualified personnel.`;
+  const conclusionText =
+    `This report documents ${data.annotations.length} finding(s) identified during the analysis of ${data.imageTitle}. ` +
+    `Evidence hierarchy: ${tier1Count} finding(s) with cryptographic ProofSnap verification (Tier 1), ` +
+    `${tier2Count} with supporting visual evidence totaling ${totalSupportingImages} image(s) (Tier 2), ` +
+    `and ${tier3Count} with observational comments only (Tier 3). ` +
+    `This report was generated by ImageProof Studio for professional image verification.`;
 
   const conclusionLines = pdf.splitTextToSize(conclusionText, contentWidth);
   pdf.text(conclusionLines, margin, yPosition);
@@ -302,12 +286,10 @@ export async function generateReport(data: ReportData): Promise<void> {
   for (let i = 1; i <= pageCount; i++) {
     pdf.setPage(i);
 
-    // Footer line
     pdf.setDrawColor(229, 231, 235);
     pdf.setLineWidth(0.3);
     pdf.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
 
-    // Footer text
     pdf.setFontSize(8);
     pdf.setTextColor(156, 163, 175);
     pdf.setFont("helvetica", "normal");
@@ -327,6 +309,200 @@ export async function generateReport(data: ReportData): Promise<void> {
     "-"
   )}-${Date.now()}.pdf`;
   pdf.save(filename);
+}
+
+// Render individual finding with all evidence tiers
+async function renderFinding(
+  pdf: jsPDF,
+  annotation: Annotation,
+  index: number,
+  margin: number,
+  yPosition: number,
+  contentWidth: number
+): Promise<void> {
+  const tier = annotation.proofSnapAssetId
+    ? 1
+    : annotation.supportingEvidenceIds &&
+      annotation.supportingEvidenceIds.length > 0
+    ? 2
+    : 3;
+
+  // Determine box color based on tier
+  const tierColors = {
+    1: { bg: [240, 253, 244], border: [134, 239, 172] }, // green
+    2: { bg: [239, 246, 255], border: [147, 197, 253] }, // blue
+    3: { bg: [249, 250, 251], border: [229, 231, 235] }, // gray
+  };
+
+  const colors = tierColors[tier as keyof typeof tierColors];
+
+  // Calculate box height
+  let boxHeight = 25;
+  if (annotation.comment) {
+    const lines = pdf.splitTextToSize(annotation.comment, contentWidth - 25);
+    boxHeight = Math.max(30, 20 + lines.length * 5);
+  }
+
+  // Finding box
+  pdf.setFillColor(colors.bg[0], colors.bg[1], colors.bg[2]);
+  pdf.roundedRect(margin, yPosition, contentWidth, boxHeight, 2, 2, "F");
+  pdf.setDrawColor(colors.border[0], colors.border[1], colors.border[2]);
+  pdf.setLineWidth(1);
+  pdf.roundedRect(margin, yPosition, contentWidth, boxHeight, 2, 2, "S");
+
+  const innerY = yPosition + 10;
+
+  // Number badge
+  const badgeColor =
+    tier === 1 ? [34, 197, 94] : tier === 2 ? [59, 130, 246] : [107, 114, 128];
+  pdf.setFillColor(badgeColor[0], badgeColor[1], badgeColor[2]);
+  pdf.circle(margin + 8, innerY, 6, "F");
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(10);
+  pdf.setFont("helvetica", "bold");
+
+  // Manually center the text
+  const numberText = String(index + 1);
+  const textWidth = pdf.getTextWidth(numberText);
+  const centerX = margin + 8;
+  const centerY = innerY;
+
+  // Draw text centered in circle (accounting for font baseline)
+  pdf.text(numberText, centerX - textWidth / 2, centerY + 3);
+
+  // Title with tier badge
+  pdf.setTextColor(0, 0, 0);
+  pdf.setFontSize(11);
+  pdf.text(`Finding #${index + 1}`, margin + 18, innerY + 2);
+
+  // Tier badge
+  const tierText = `Tier ${tier}`;
+  const tierBgColor = badgeColor;
+  pdf.setFillColor(tierBgColor[0], tierBgColor[1], tierBgColor[2]);
+  pdf.roundedRect(margin + contentWidth - 28, yPosition + 6, 24, 8, 2, 2, "F");
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(8);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(tierText, margin + contentWidth - 16, yPosition + 11, {
+    align: "center",
+  });
+
+  // Comment
+  let contentY = innerY + 8;
+  pdf.setFontSize(9);
+  pdf.setFont("helvetica", "normal");
+
+  if (annotation.comment) {
+    pdf.setTextColor(55, 65, 81);
+    const lines = pdf.splitTextToSize(annotation.comment, contentWidth - 30);
+    pdf.text(lines, margin + 18, contentY);
+    contentY += lines.length * 5 + 5;
+  }
+
+  let currentY = yPosition + boxHeight + 5;
+
+  // Supporting Evidence (Tier 2)
+  if (
+    annotation.supportingEvidenceIds &&
+    annotation.supportingEvidenceIds.length > 0
+  ) {
+    pdf.setFontSize(9);
+    pdf.setFont("helvetica", "bold");
+    pdf.setTextColor(59, 130, 246);
+    pdf.text(
+      `Supporting Evidence (${annotation.supportingEvidenceIds.length} image${
+        annotation.supportingEvidenceIds.length !== 1 ? "s" : ""
+      })`,
+      margin + 5,
+      currentY
+    );
+    currentY += 6;
+
+    // Load and display evidence thumbnails (max 4)
+    const evidenceToShow = annotation.supportingEvidenceIds.slice(0, 4);
+    const thumbSize = 25;
+    const gap = 3;
+
+    for (let i = 0; i < evidenceToShow.length; i++) {
+      try {
+        const evidenceUrl = await imageStorage.getEvidence(evidenceToShow[i]);
+        if (evidenceUrl) {
+          const xPos = margin + 5 + i * (thumbSize + gap);
+          pdf.setDrawColor(191, 219, 254);
+          pdf.rect(xPos, currentY, thumbSize, thumbSize);
+          pdf.addImage(
+            evidenceUrl,
+            "JPEG",
+            xPos,
+            currentY,
+            thumbSize,
+            thumbSize
+          );
+        }
+      } catch (error) {
+        console.error("Failed to load evidence for PDF:", error);
+      }
+    }
+
+    currentY += thumbSize + 5;
+  }
+
+  // ProofSnap Evidence (Tier 1)
+  if (annotation.proofSnapAssetId && annotation.proofSnapUrl) {
+    pdf.setFontSize(9);
+    pdf.setFont("helvetica", "bold");
+    pdf.setTextColor(34, 197, 94);
+    pdf.text(
+      "ProofSnap Evidence (Cryptographically Verified)",
+      margin + 5,
+      currentY
+    );
+    currentY += 6;
+
+    // ProofSnap thumbnail
+    try {
+      const thumbSize = 25;
+      pdf.setDrawColor(134, 239, 172);
+      pdf.setLineWidth(1.5);
+      pdf.rect(margin + 5, currentY, thumbSize, thumbSize);
+      pdf.addImage(
+        annotation.proofSnapUrl,
+        "JPEG",
+        margin + 5,
+        currentY,
+        thumbSize,
+        thumbSize
+      );
+
+      // Verified badge
+      pdf.setFillColor(34, 197, 94);
+      pdf.roundedRect(margin + 7, currentY + 2, 21, 5, 1, 1, "F");
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(6);
+      pdf.text("✓ VERIFIED", margin + 17.5, currentY + 5, { align: "center" });
+
+      // Link
+      pdf.setFontSize(8);
+      pdf.setTextColor(59, 130, 246);
+      pdf.textWithLink("View ProofSnap Evidence", margin + 35, currentY + 12, {
+        url: annotation.proofSnapUrl,
+      });
+
+      currentY += thumbSize + 5;
+    } catch (error) {
+      console.error("Failed to load ProofSnap for PDF:", error);
+    }
+  }
+
+  // Timestamp
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7);
+  pdf.setTextColor(107, 114, 128);
+  pdf.text(
+    `Logged: ${new Date(annotation.createdAt).toLocaleString()}`,
+    margin + 5,
+    currentY
+  );
 }
 
 // Helper function to create canvas with annotations scaled to original image
@@ -351,20 +527,16 @@ async function createAnnotatedCanvas(
         return;
       }
 
-      // Calculate scale factors
       const scaleX = img.width / canvasWidth;
       const scaleY = img.height / canvasHeight;
 
-      // Draw image
       ctx.drawImage(img, 0, 0);
 
-      // Draw annotations with scaled coordinates
       annotations.forEach((annotation, index) => {
         const scaledX = annotation.x * scaleX;
         const scaledY = annotation.y * scaleY;
         const scaledRadius = 20 * Math.min(scaleX, scaleY);
 
-        // Draw circle
         ctx.beginPath();
         ctx.arc(scaledX, scaledY, scaledRadius, 0, 2 * Math.PI);
         ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
@@ -373,7 +545,6 @@ async function createAnnotatedCanvas(
         ctx.lineWidth = 3 * Math.min(scaleX, scaleY);
         ctx.stroke();
 
-        // Draw number
         ctx.fillStyle = "#fff";
         ctx.font = `bold ${Math.round(16 * Math.min(scaleX, scaleY))}px Arial`;
         ctx.textAlign = "center";

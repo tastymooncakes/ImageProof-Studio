@@ -2,21 +2,33 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { preloadedImages } from "@/data/preloadedImages";
 import { storage } from "@/lib/storage";
+import { imageStorage } from "@/lib/imageStorage";
 import { generateReport } from "@/lib/reportGenerator";
 import { Annotation } from "@/types";
 import Link from "next/link";
-import { ArrowLeft, Trash2, FileText } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
 import AnnotationCanvas from "@/components/AnnotationCanvas";
 import AnnotationModal from "@/components/AnnotationModal";
+import AnnotationCard from "@/components/AnnotationCard";
 
 export default function AnnotatePage() {
   const params = useParams();
   const imageId = params.imageId as string;
 
-  const image = preloadedImages.find((img) => img.id === imageId);
+  // Check if it's a preloaded or uploaded image
+  const preloadedImage = preloadedImages.find((img) => img.id === imageId);
+  const isUploadedImage = imageId.startsWith("upload-");
+
+  const [imageUrl, setImageUrl] = useState<string | null>(
+    preloadedImage ? preloadedImage.url : null
+  );
+  const [imageTitle, setImageTitle] = useState<string>(
+    preloadedImage ? `Image #${preloadedImage.id}` : "Uploaded Image"
+  );
+  const [imageLoading, setImageLoading] = useState(isUploadedImage);
 
   const [canvasDimensions, setCanvasDimensions] = useState({
     width: 0,
@@ -32,6 +44,32 @@ export default function AnnotatePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
+  // Load uploaded image from IndexedDB
+  useEffect(() => {
+    if (isUploadedImage) {
+      loadUploadedImage();
+    }
+  }, [imageId, isUploadedImage]);
+
+  const loadUploadedImage = async () => {
+    try {
+      const url = await imageStorage.getImage(imageId);
+      if (url) {
+        setImageUrl(url);
+        // Try to get image name from IndexedDB
+        const images = await imageStorage.getAllImages();
+        const imageData = images.find((img) => img.id === imageId);
+        if (imageData) {
+          setImageTitle(imageData.name);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load uploaded image:", error);
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
   const handleAddAnnotation = (x: number, y: number) => {
     const newAnnotation: Annotation = {
       id: `${Date.now()}-${Math.random()}`,
@@ -41,7 +79,7 @@ export default function AnnotatePage() {
       createdAt: new Date().toISOString(),
     };
 
-    storage.saveAnnotation(newAnnotation);
+    // Don't save to storage yet - only save when user confirms in modal
     setAnnotations([...annotations, newAnnotation]);
     setSelectedAnnotation(newAnnotation);
     setIsModalOpen(true);
@@ -63,22 +101,32 @@ export default function AnnotatePage() {
   const handleSaveComment = (
     comment: string,
     proofSnapAssetId?: string,
-    proofSnapUrl?: string
+    proofSnapUrl?: string,
+    supportingEvidenceIds?: string[]
   ) => {
     if (!selectedAnnotation) return;
 
-    // Delete old annotation
-    storage.deleteAnnotation(selectedAnnotation.id);
+    console.log("Saving annotation with evidence:", supportingEvidenceIds);
 
-    // Create updated annotation
+    // Check if this is a new annotation (not in storage yet)
+    const existingAnnotation = storage
+      .getAnnotations(imageId)
+      .find((a) => a.id === selectedAnnotation.id);
+
+    if (existingAnnotation) {
+      // Existing annotation - delete and update
+      storage.deleteAnnotation(selectedAnnotation.id);
+    }
+
     const updatedAnnotation = {
       ...selectedAnnotation,
       comment,
       proofSnapAssetId,
       proofSnapUrl,
+      supportingEvidenceIds,
     };
 
-    // Save updated annotation
+    // Save to storage
     storage.saveAnnotation(updatedAnnotation);
 
     // Update state
@@ -87,16 +135,40 @@ export default function AnnotatePage() {
         a.id === selectedAnnotation.id ? updatedAnnotation : a
       )
     );
+
+    // Close modal and clear selection
+    setIsModalOpen(false);
+    setSelectedAnnotation(null);
+  };
+
+  const handleModalClose = () => {
+    if (!selectedAnnotation) {
+      setIsModalOpen(false);
+      return;
+    }
+
+    // Check if annotation exists in storage (was saved)
+    const savedAnnotation = storage
+      .getAnnotations(imageId)
+      .find((a) => a.id === selectedAnnotation.id);
+
+    if (!savedAnnotation) {
+      // Annotation was never saved, remove it from state
+      setAnnotations(annotations.filter((a) => a.id !== selectedAnnotation.id));
+    }
+
+    setIsModalOpen(false);
+    setSelectedAnnotation(null);
   };
 
   const handleGenerateReport = async () => {
-    if (!image) return;
+    if (!imageUrl) return;
 
     setIsGeneratingReport(true);
     try {
       await generateReport({
-        imageUrl: image.url,
-        imageTitle: `Image #${image.id}`,
+        imageUrl,
+        imageTitle,
         annotations,
         imageWidth: canvasDimensions.width,
         imageHeight: canvasDimensions.height,
@@ -109,7 +181,19 @@ export default function AnnotatePage() {
     }
   };
 
-  if (!image) {
+  if (imageLoading) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold text-gray-900 mb-4">
+            Loading image...
+          </h1>
+        </div>
+      </main>
+    );
+  }
+
+  if (!imageUrl) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
@@ -140,8 +224,8 @@ export default function AnnotatePage() {
             <ArrowLeft size={18} />
             <span>Back to Gallery</span>
           </Link>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Image #{image.id}
+          <h1 className="text-xl font-semibold text-gray-900 truncate max-w-md">
+            {imageTitle}
           </h1>
           <button
             onClick={handleGenerateReport}
@@ -162,7 +246,7 @@ export default function AnnotatePage() {
         <div className="lg:col-span-2">
           <div className="bg-white rounded-xl shadow-sm p-4">
             <AnnotationCanvas
-              imageUrl={image.url}
+              imageUrl={imageUrl}
               annotations={annotations}
               onAddAnnotation={handleAddAnnotation}
               onSelectAnnotation={handleSelectAnnotation}
@@ -186,48 +270,14 @@ export default function AnnotatePage() {
             ) : (
               <div className="space-y-3">
                 {annotations.map((annotation, index) => (
-                  <div
+                  <AnnotationCard
                     key={annotation.id}
-                    className={`p-3 rounded-lg border transition-colors ${
-                      selectedAnnotation?.id === annotation.id
-                        ? "border-gray-900 bg-gray-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div
-                        onClick={() => handleSelectAnnotation(annotation)}
-                        className="flex items-center gap-2 cursor-pointer flex-1"
-                      >
-                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold">
-                          {index + 1}
-                        </span>
-                        <span className="text-sm font-medium text-gray-900">
-                          Annotation {index + 1}
-                        </span>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteAnnotation(annotation.id);
-                        }}
-                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Delete annotation"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                    {annotation.comment && (
-                      <p className="text-sm text-gray-600 ml-8">
-                        {annotation.comment}
-                      </p>
-                    )}
-                    {annotation.proofSnapAssetId && (
-                      <p className="text-xs text-blue-600 ml-8 mt-1">
-                        📎 ProofSnap evidence attached
-                      </p>
-                    )}
-                  </div>
+                    annotation={annotation}
+                    index={index}
+                    isSelected={selectedAnnotation?.id === annotation.id}
+                    onSelect={() => handleSelectAnnotation(annotation)}
+                    onDelete={() => handleDeleteAnnotation(annotation.id)}
+                  />
                 ))}
               </div>
             )}
@@ -240,7 +290,7 @@ export default function AnnotatePage() {
         <AnnotationModal
           annotation={selectedAnnotation}
           annotationNumber={selectedIndex}
-          onClose={() => setIsModalOpen(false)}
+          onClose={handleModalClose}
           onSave={handleSaveComment}
         />
       )}

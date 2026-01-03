@@ -8,6 +8,18 @@ export interface PreloadedImage {
   category: "political" | "viral" | "ai-art";
 }
 
+export interface UploadedImage {
+  id: string;
+  name: string;
+  uploadedAt: string;
+}
+
+export interface SupportingEvidence {
+  id: string;
+  name: string;
+  uploadedAt: string;
+}
+
 export interface Annotation {
   id: string;
   imageId: string;
@@ -16,6 +28,7 @@ export interface Annotation {
   comment?: string;
   proofSnapAssetId?: string;
   proofSnapUrl?: string;
+  supportingEvidenceIds?: string[];
   createdAt: string;
 }
 
